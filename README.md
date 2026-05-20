@@ -1,16 +1,32 @@
 # QA Assistant
 
-Assistant Python pour ingérer un corpus PDF métier et préparer des documents internes pour des usages de Q&A.
+Assistant Python pour ingérer un corpus de PDF métier, générer des embeddings OpenAI, indexer les chunks dans Chroma, puis interroger le corpus via un agent LangChain.
 
-## Structure
+## Ce que fait le projet
+
+Le projet couvre 3 étapes:
+
+1. Charger des PDF déposés dans `data/`.
+2. Découper le contenu en chunks, créer des embeddings OpenAI, puis indexer le tout dans une base vectorielle Chroma persistante.
+3. Interroger le corpus avec un agent RAG LangChain qui récupère le contexte pertinent avant de répondre.
+
+Le point d’entrée `main.py` exécute aussi une petite évaluation automatique avec quelques questions métier simples pour vérifier la pertinence des réponses.
+
+## Architecture
 
 ```text
 QA_Assistant/
 ├── main.py
 ├── config.py
 ├── llm.py
+├── agents/
+│   └── rag.py
 ├── tools/
+│   ├── search.py
+│   └── database.py
 ├── memory/
+│   ├── store.py
+│   └── vectorstore.py
 ├── data/
 ├── chroma_db/
 ├── .env
@@ -18,33 +34,113 @@ QA_Assistant/
 └── requirements.txt
 ```
 
-## Où mettre les PDF
+## Rôle des fichiers
 
-Dépose les fichiers PDF à traiter dans le dossier [`data/`](./data).
+- `main.py`: point d’entrée. Lance l’ingestion, indexe le corpus, exécute l’agent RAG et affiche un résumé lisible en français.
+- `config.py`: paramètres globaux, chargement du `.env` et prompt système général.
+- `llm.py`: création du modèle OpenAI utilisé par l’agent.
+- `agents/rag.py`: agent LangChain RAG et tool de retrieval sur Chroma.
+- `tools/search.py`: ingestion des PDF, parsing, découpage, embeddings et indexation.
+- `memory/store.py`: stockage mémoire local des chunks et de leurs embeddings.
+- `memory/vectorstore.py`: création et gestion du stockage vectoriel Chroma.
+- `tools/database.py`: emplacement réservé pour de futurs outils liés à une base métier.
 
-Par défaut, l'application lit ce dossier automatiquement si `PDF_CORPUS_PATHS` n'est pas défini.
+## Ce que tu dois déposer dans `data/`
 
-## Configuration optionnelle
+Place ici les PDF métier à traiter:
 
-Si tu veux cibler d'autres chemins que `data/`, définis `PDF_CORPUS_PATHS` dans `.env`.
+- procédures internes
+- fiches produits
+- modes opératoires
+- documents de référence
 
-Exemple :
+Le projet lit automatiquement le dossier `data/` par défaut.
+
+## Configuration
+
+Crée ou modifie le fichier `.env` à la racine du projet.
+
+Variables utiles:
 
 ```env
+OPENAI_API_KEY="ta_cle_openai"
 PDF_CORPUS_PATHS="D:\YASSINE\Objectware\Formations\IA\Module 3\QA_Assistant\data"
 ```
 
-Tu peux aussi mettre plusieurs chemins séparés par `;`.
+Notes:
 
-## Lancer le projet
+- `OPENAI_API_KEY` est indispensable pour les embeddings et les réponses du modèle.
+- `PDF_CORPUS_PATHS` est optionnelle. Si elle n’est pas définie, le projet utilise automatiquement `data/`.
+- Tu peux mettre plusieurs chemins séparés par `;`.
+
+## Dépendances principales
+
+- `langchain`
+- `langchain-openai`
+- `langchain-chroma`
+- `langchain-community`
+- `pypdf`
+- `chromadb`
+
+## Exécution
 
 ```bash
 uv run .\main.py
 ```
 
-## Remarques
+Au lancement, le script:
 
-- `OPENAI_API_KEY` doit être défini dans `.env`.
-- Le tool d'ingestion utilise LangChain pour charger et découper les PDF.
-- Les embeddings sont générés avec OpenAI puis indexés dans Chroma, stocké localement dans [`chroma_db/`](./chroma_db).
-- Les métadonnées indexées suivent une structure stable: `source`, `source_name`, `source_type`, `page`, `chunk_index`, `chunk_id`, `chunk_chars`, `embedding_model`.
+1. charge les PDF
+2. génère les embeddings
+3. indexe les chunks dans Chroma
+4. interroge le corpus avec l’agent RAG
+5. affiche une évaluation simple des réponses
+
+## Stockage généré
+
+L’index Chroma est persisté localement dans:
+
+```text
+chroma_db/
+```
+
+Tu peux supprimer ce dossier si tu veux repartir d’un index vide.
+
+## Métadonnées indexées
+
+Chaque chunk indexé dans Chroma contient des métadonnées stables:
+
+- `source`
+- `source_name`
+- `source_type`
+- `page`
+- `chunk_index`
+- `chunk_id`
+- `chunk_chars`
+- `embedding_model`
+
+Ces champs permettent de retracer l’origine d’une réponse et de filtrer les résultats si besoin.
+
+## Format de réponse
+
+Le projet affiche:
+
+- un résumé d’ingestion en français
+- les informations Chroma
+- les questions métier testées
+- la réponse de l’agent
+- une indication simple de pertinence
+
+## Limites actuelles
+
+- L’évaluation de pertinence est volontairement simple: elle repose sur des mots-clés.
+- Le projet est orienté ingestion et RAG; ce n’est pas encore une application complète de production avec UI.
+- Si le corpus contient des PDF scannés ou sans texte extractible, l’extraction peut être incomplète.
+
+## Améliorations possibles
+
+- ajouter une vraie métrique d’évaluation
+- exposer un outil de recherche métier plus riche
+- ajouter une interface CLI ou web
+- permettre l’ajout incrémental de nouveaux PDF sans réindexer tout le corpus
+- brancher plusieurs collections Chroma par type de document
