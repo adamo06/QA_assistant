@@ -10,7 +10,7 @@ Le projet couvre 3 étapes:
 2. Découper le contenu en chunks, créer des embeddings OpenAI, puis indexer le tout dans une base vectorielle Chroma persistante.
 3. Interroger le corpus avec un agent RAG LangChain qui récupère le contexte pertinent avant de répondre.
 
-Le point d’entrée `main.py` exécute aussi une petite évaluation automatique avec quelques questions métier simples pour vérifier la pertinence des réponses.
+Le point d’entrée `main.py` indexe le corpus puis passe en mode interactif dans le terminal pour poser librement des questions métier.
 
 ## Architecture
 
@@ -93,8 +93,8 @@ Au lancement, le script:
 1. charge les PDF
 2. génère les embeddings
 3. indexe les chunks dans Chroma
-4. interroge le corpus avec l’agent RAG
-5. affiche une évaluation simple des réponses
+4. démarre une session interactive dans le terminal
+5. permet de poser des questions métier librement
 
 ## Stockage généré
 
@@ -127,13 +127,12 @@ Le projet affiche:
 
 - un résumé d’ingestion en français
 - les informations Chroma
-- les questions métier testées
-- la réponse de l’agent
-- une indication simple de pertinence
+- les réponses de l’agent à chaque question saisie
+
+Pour quitter la session interactive, tape `exit`, `quit` ou `q`.
 
 ## Limites actuelles
 
-- L’évaluation de pertinence est volontairement simple: elle repose sur des mots-clés.
 - Le projet est orienté ingestion et RAG; ce n’est pas encore une application complète de production avec UI.
 - Si le corpus contient des PDF scannés ou sans texte extractible, l’extraction peut être incomplète.
 

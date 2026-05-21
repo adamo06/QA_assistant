@@ -21,29 +21,9 @@ if raw_pdf_paths:
 else:
     PDF_CORPUS_PATHS = [str(DEFAULT_PDF_CORPUS_PATH)]
 
-BUSINESS_QUESTIONS = [
-    {
-        "question": "Qu'est-ce que Small Basic ?",
-        "expected_keywords": ["langage de programmation", "débutants", "simple"],
-    },
-    {
-        "question": "Quel est l'objectif de Small Basic ?",
-        "expected_keywords": ["lever les barrières", "programmation logicielle", "apporter"],
-    },
-    {
-        "question": "Quels exemples de projets le document cite-t-il à la fin ?",
-        "expected_keywords": ["casse-briques", "fond d'écran"],
-    },
-    {
-        "question": "Comment le document décrit-il la programmation logicielle ?",
-        "expected_keywords": ["création de logiciel", "langages de programmation"],
-    },
-]
-
 
 def format_ingestion_summary(summary: dict[str, object]) -> str:
-    lines = ["Résumé d'ingestion", "=================="]
-    lines.append("")
+    lines = ["Résumé d'ingestion", "==================", ""]
     lines.append(f"Statut : {summary.get('status', 'inconnu')}")
     if summary.get("message"):
         lines.append(f"Message : {summary['message']}")
@@ -114,35 +94,39 @@ def extract_answer_text(result) -> str:
     return str(last_message)
 
 
-def score_answer(answer: str, expected_keywords: list[str]) -> tuple[int, int, list[str]]:
-    normalized = answer.lower()
-    matched = [keyword for keyword in expected_keywords if keyword.lower() in normalized]
-    return len(matched), len(expected_keywords), matched
+def ask_question(agent) -> None:
+    print()
+    print("Mode interactif")
+    print("===============")
+    print("Tape ta question métier, ou `exit` pour quitter.")
+
+    while True:
+        try:
+            question = input("\nVous > ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nFin de session.")
+            break
+
+        if not question:
+            continue
+        if question.lower() in {"exit", "quit", "q"}:
+            print("Fin de session.")
+            break
+
+        result = agent.invoke(
+            {"messages": [{"role": "user", "content": question}]},
+            config={"configurable": {"thread_id": THREAD_ID}},
+        )
+        answer = extract_answer_text(result)
+        print(f"\nAssistant > {answer}")
 
 
 def main():
     ingestion_summary = ingest_pdf_corpus_data(PDF_CORPUS_PATHS)
     print(format_ingestion_summary(ingestion_summary))
-    print()
-    print("Évaluation RAG")
-    print("==============")
 
     agent = build_rag_agent()
-    for index, item in enumerate(BUSINESS_QUESTIONS, start=1):
-        result = agent.invoke(
-            {"messages": [{"role": "user", "content": item["question"]}]},
-            config={"configurable": {"thread_id": f"{THREAD_ID}-rag-{index}"}},
-        )
-        answer = extract_answer_text(result)
-        score, total, matched = score_answer(answer, item["expected_keywords"])
-        relevance = "pertinent" if score >= max(1, total // 2) else "à revoir"
-
-        print()
-        print(f"Question {index} : {item['question']}")
-        print(f"Réponse : {answer}")
-        print(f"Pertinence : {relevance} ({score}/{total} mots-clés trouvés)")
-        if matched:
-            print("Mots-clés retrouvés : " + ", ".join(matched))
+    ask_question(agent)
 
 
 if __name__ == "__main__":
