@@ -7,6 +7,7 @@ from langchain_openai import OpenAIEmbeddings
 
 from llm import build_model
 from memory.vectorstore import CHROMA_DIR, COLLECTION_NAME
+from tools.business_api import business_api_summary, query_business_api
 
 
 RAG_SYSTEM_PROMPT = """Tu es un assistant de recherche documentaire métier.
@@ -16,6 +17,7 @@ Règles:
 - Si le contexte ne suffit pas, dis-le clairement.
 - Cite les sources sous la forme: source_name, page.
 - Réponds en français, de manière concise et utile.
+- Tu peux aussi utiliser l'API métier pour obtenir un résumé du corpus ou des extraits pertinents.
 """
 
 
@@ -51,6 +53,6 @@ def retrieve_context(query: str):
 def build_rag_agent():
     return create_agent(
         model=build_model(),
-        tools=[retrieve_context],
+        tools=[retrieve_context, query_business_api, business_api_summary],
         system_prompt=RAG_SYSTEM_PROMPT,
     )
