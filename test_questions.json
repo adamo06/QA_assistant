@@ -1,0 +1,72 @@
+[
+  {
+    "id": "q1",
+    "type": "dans_corpus",
+    "question": "Qu’est-ce que Small Basic ?",
+    "expected_answer": "Small Basic est un langage de programmation conçu pour rendre la programmation simple et amusante pour les débutants.",
+    "expected_source": "Introduction_Small_Basic.pdf"
+  },
+  {
+    "id": "q2",
+    "type": "reformulation",
+    "question": "Comment Small Basic aide-t-il les débutants à apprendre la programmation ?",
+    "expected_answer": "Même idée que la question 1 : Small Basic est conçu pour rendre la programmation simple et accessible aux débutants.",
+    "expected_source": "Introduction_Small_Basic.pdf"
+  },
+  {
+    "id": "q3",
+    "type": "dans_corpus",
+    "question": "Quels sont les deux exemples de projets cités à la fin du document ?",
+    "expected_answer": "Un jeu de casse-briques et un programme qui change aléatoirement le fond d’écran.",
+    "expected_source": "Introduction_Small_Basic.pdf"
+  },
+  {
+    "id": "q4",
+    "type": "dans_corpus_detail",
+    "question": "Comment le document définit-il un programme d’ordinateur ?",
+    "expected_answer": "Un programme est un ensemble d’instructions pour l’ordinateur.",
+    "expected_source": "Introduction_Small_Basic.pdf"
+  },
+  {
+    "id": "q5",
+    "type": "dans_corpus",
+    "question": "Quels éléments composent l’environnement Small Basic selon le document ?",
+    "expected_answer": "L’éditeur, la barre d’outils et la surface.",
+    "expected_source": "Introduction_Small_Basic.pdf"
+  },
+  {
+    "id": "q6",
+    "type": "hors_corpus",
+    "question": "Quelle est la version la plus récente de Python ?",
+    "expected_answer": "Je n’ai pas cette info.",
+    "expected_source": null
+  },
+  {
+    "id": "q7",
+    "type": "hors_corpus",
+    "question": "Qui est le PDG de Microsoft aujourd’hui ?",
+    "expected_answer": "Hors de mon périmètre.",
+    "expected_source": null
+  },
+  {
+    "id": "q8",
+    "type": "ambigue",
+    "question": "Comment ça fonctionne ?",
+    "expected_answer": "Demande de précisions sur ce que désigne \"ça\".",
+    "expected_source": null
+  },
+  {
+    "id": "q9",
+    "type": "trop_large",
+    "question": "Fais-moi un résumé complet du document.",
+    "expected_answer": "Demande de préciser le niveau de détail ou proposer un résumé court.",
+    "expected_source": "Introduction_Small_Basic.pdf"
+  },
+  {
+    "id": "q10",
+    "type": "dans_corpus",
+    "question": "Quelle est l’intention de Small Basic selon le document ?",
+    "expected_answer": "Lever les barrières et rendre la programmation accessible aux débutants.",
+    "expected_source": "Introduction_Small_Basic.pdf"
+  }
+]
