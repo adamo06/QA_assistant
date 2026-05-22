@@ -1,0 +1,28 @@
+services:
+  qa-assistant:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qa-assistant
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      PDF_CORPUS_PATHS: /app/data
+    volumes:
+      - ./data:/app/data:ro
+      - ./chroma_db:/app/chroma_db
+    restart: unless-stopped
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      PDF_CORPUS_PATHS: /app/data
+    volumes:
+      - ./data:/app/data:ro
+      - ./chroma_db:/app/chroma_db
+    entrypoint: ["/app/docker-ingest.sh"]

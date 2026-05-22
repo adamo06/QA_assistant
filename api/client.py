@@ -6,15 +6,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from config import (
-    BUSINESS_API_AUTH_METHOD,
-    BUSINESS_API_BASE_URL,
-    BUSINESS_API_KEY,
-    BUSINESS_OAUTH_CLIENT_ID,
-    BUSINESS_OAUTH_CLIENT_SECRET,
-    load_env_file,
-)
-from api.server import app
+from config import BUSINESS_API_BASE_URL, load_env_file
 
 
 load_env_file()
@@ -27,28 +19,9 @@ class BusinessApiResult:
 
 class BusinessApiClient:
     def __init__(self) -> None:
+        from api.server import app
+
         self._client = TestClient(app, base_url=BUSINESS_API_BASE_URL)
-        self._bearer_token: str | None = None
-
-    def _auth_headers(self) -> dict[str, str]:
-        if BUSINESS_API_AUTH_METHOD == "api_key":
-            return {"X-API-Key": BUSINESS_API_KEY}
-
-        if BUSINESS_API_AUTH_METHOD == "oauth":
-            if not self._bearer_token:
-                response = self._client.post(
-                    "/oauth/token",
-                    json={
-                        "grant_type": "client_credentials",
-                        "client_id": BUSINESS_OAUTH_CLIENT_ID,
-                        "client_secret": BUSINESS_OAUTH_CLIENT_SECRET,
-                    },
-                )
-                response.raise_for_status()
-                self._bearer_token = response.json()["access_token"]
-            return {"Authorization": f"Bearer {self._bearer_token}"}
-
-        return {}
 
     def health(self) -> BusinessApiResult:
         response = self._client.get("/health")
@@ -56,7 +29,7 @@ class BusinessApiClient:
         return BusinessApiResult(payload=response.json())
 
     def summary(self) -> BusinessApiResult:
-        response = self._client.get("/v1/business/summary", headers=self._auth_headers())
+        response = self._client.get("/v1/business/summary")
         response.raise_for_status()
         return BusinessApiResult(payload=response.json())
 
@@ -64,7 +37,23 @@ class BusinessApiClient:
         response = self._client.get(
             "/v1/business/search",
             params={"q": query, "k": k},
-            headers=self._auth_headers(),
+        )
+        response.raise_for_status()
+        return BusinessApiResult(payload=response.json())
+
+    def chat(
+        self,
+        message: str,
+        history: list[dict[str, str]] | None = None,
+        thread_id: str | None = None,
+    ) -> BusinessApiResult:
+        response = self._client.post(
+            "/chat",
+            json={
+                "message": message,
+                "history": history or [],
+                "thread_id": thread_id,
+            },
         )
         response.raise_for_status()
         return BusinessApiResult(payload=response.json())

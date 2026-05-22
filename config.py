@@ -22,16 +22,13 @@ def load_env_file(path: str = ".env") -> None:
 
 load_env_file()
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 MODEL_NAME = "openai:gpt-5.4-mini"
 TEMPERATURE = 0
 TIMEOUT = 300
 MAX_TOKENS = 25000
 THREAD_ID = "great-gatsby-da"
 BUSINESS_API_BASE_URL = os.getenv("BUSINESS_API_BASE_URL", "http://127.0.0.1:8000")
-BUSINESS_API_AUTH_METHOD = os.getenv("BUSINESS_API_AUTH_METHOD", "api_key")
-BUSINESS_API_KEY = os.getenv("BUSINESS_API_KEY", "dev-business-key")
-BUSINESS_OAUTH_CLIENT_ID = os.getenv("BUSINESS_OAUTH_CLIENT_ID", "qa-assistant")
-BUSINESS_OAUTH_CLIENT_SECRET = os.getenv("BUSINESS_OAUTH_CLIENT_SECRET", "dev-oauth-secret")
 
 SYSTEM_PROMPT = """You are a business document assistant.
 

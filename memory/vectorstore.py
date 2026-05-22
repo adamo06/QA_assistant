@@ -30,7 +30,11 @@ def _clean_metadata_value(value):
     return str(value)
 
 
-def build_chunk_metadata(document: Document, chunk_index: int) -> dict[str, object]:
+def build_chunk_metadata(
+    document: Document,
+    chunk_index: int,
+    embedding_model: str = EMBEDDING_MODEL,
+) -> dict[str, object]:
     source = _clean_metadata_value(document.metadata.get("source", "unknown"))
     source_path = Path(str(source))
     page = document.metadata.get("page")
@@ -48,11 +52,15 @@ def build_chunk_metadata(document: Document, chunk_index: int) -> dict[str, obje
         "chunk_index": chunk_index,
         "chunk_id": chunk_id,
         "chunk_chars": len(chunk_text),
-        "embedding_model": EMBEDDING_MODEL,
+        "embedding_model": embedding_model,
     }
 
 
-def index_chunks_in_chroma(documents: list[Document], embeddings: list[list[float]]) -> dict[str, object]:
+def index_chunks_in_chroma(
+    documents: list[Document],
+    embeddings: list[list[float]],
+    embedding_model: str = EMBEDDING_MODEL,
+) -> dict[str, object]:
     client = chromadb.PersistentClient(path=str(CHROMA_DIR))
     try:
         client.delete_collection(COLLECTION_NAME)
@@ -65,7 +73,7 @@ def index_chunks_in_chroma(documents: list[Document], embeddings: list[list[floa
     metadatas: list[dict[str, object]] = []
 
     for chunk_index, (document, embedding) in enumerate(zip(documents, embeddings, strict=True)):
-        metadata = build_chunk_metadata(document, chunk_index)
+        metadata = build_chunk_metadata(document, chunk_index, embedding_model=embedding_model)
         ids.append(metadata["chunk_id"])
         texts.append(document.page_content)
         metadatas.append(metadata)

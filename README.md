@@ -34,8 +34,7 @@ QA_Assistant/
 ├── data/
 ├── chroma_db/
 ├── .env
-├── pyproject.toml
-└── requirements.txt
+└── pyproject.toml
 ```
 
 ## Rôle des fichiers
@@ -43,7 +42,7 @@ QA_Assistant/
 - `main.py`: point d’entrée. Lance l’ingestion, indexe le corpus, exécute l’agent RAG et affiche un résumé lisible en français.
 - `config.py`: paramètres globaux, chargement du `.env` et prompt système général.
 - `llm.py`: création du modèle OpenAI utilisé par l’agent.
-- `api/server.py`: API FastAPI métier, avec auth par clé API ou OAuth client credentials.
+- `api/server.py`: API FastAPI métier exposant les endpoints de résumé, recherche et chat.
 - `api/client.py`: client local utilisé par l’agent pour appeler l’API métier.
 - `agents/rag.py`: agent LangChain RAG et tool de retrieval sur Chroma.
 - `tools/search.py`: ingestion des PDF, parsing, découpage, embeddings et indexation.
@@ -71,10 +70,6 @@ Variables utiles:
 ```env
 OPENAI_API_KEY="ta_cle_openai"
 PDF_CORPUS_PATHS="D:\YASSINE\Objectware\Formations\IA\Module 3\QA_Assistant\data"
-BUSINESS_API_AUTH_METHOD="api_key"
-BUSINESS_API_KEY="dev-business-key"
-BUSINESS_OAUTH_CLIENT_ID="qa-assistant"
-BUSINESS_OAUTH_CLIENT_SECRET="dev-oauth-secret"
 ```
 
 Notes:
@@ -82,8 +77,8 @@ Notes:
 - `OPENAI_API_KEY` est indispensable pour les embeddings et les réponses du modèle.
 - `PDF_CORPUS_PATHS` est optionnelle. Si elle n’est pas définie, le projet utilise automatiquement `data/`.
 - Tu peux mettre plusieurs chemins séparés par `;`.
-- `BUSINESS_API_AUTH_METHOD` accepte `api_key` ou `oauth`.
-- L’agent utilise l’API métier via le client local `TestClient`, donc tu peux la tester sans lancer un serveur séparé.
+- L’API métier est ouverte en local et l’agent utilise le client local `TestClient`, donc tu peux la tester sans lancer un serveur séparé.
+- Si `OPENAI_API_KEY` n’est pas définie, le projet passe automatiquement en mode local avec des embeddings déterministes et une réponse extractive, sans appel à OpenAI.
 
 ## Dépendances principales
 
@@ -116,10 +111,45 @@ Si tu veux exposer l’API métier en HTTP, lance:
 uv run uvicorn api.server:app --reload
 ```
 
+### Lancer avec Docker
+
+Pour construire et démarrer l'API dans un conteneur:
+
+```bash
+docker compose up --build
+```
+
+Le compose monte:
+
+- `./data` dans `/app/data` en lecture seule
+- `./chroma_db` dans `/app/chroma_db` pour garder l'index persistant
+
+Au premier démarrage, le conteneur lance automatiquement l'ingestion si l'index Chroma n'existe pas encore.
+
+### Ingestion seule avec Docker
+
+Si tu veux reconstruire l'index sans lancer l'API:
+
+```bash
+docker compose run --rm ingest
+```
+
+### Raccourcis PowerShell
+
+Un helper est disponible à la racine:
+
+```powershell
+.\docker.ps1 build
+.\docker.ps1 up
+.\docker.ps1 ingest
+.\docker.ps1 logs
+.\docker.ps1 down
+```
+
 Endpoints utiles:
 
 - `GET /health`
-- `POST /oauth/token`
+- `POST /chat`
 - `GET /v1/business/summary`
 - `GET /v1/business/search?q=...`
 

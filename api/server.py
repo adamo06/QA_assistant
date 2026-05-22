@@ -1,53 +1,43 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-from secrets import token_urlsafe
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi import FastAPI, Query
 from pydantic import BaseModel, Field
 from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
 
-from config import (
-    BUSINESS_API_AUTH_METHOD,
-    BUSINESS_API_KEY,
-    BUSINESS_OAUTH_CLIENT_ID,
-    BUSINESS_OAUTH_CLIENT_SECRET,
-    load_env_file,
-)
+from config import load_env_file
+from agents.rag import build_rag_agent
+from memory.embeddings import get_embeddings_backend
 from memory.vectorstore import CHROMA_DIR, COLLECTION_NAME
 
 
 load_env_file()
 
 app = FastAPI(title="Business API", version="1.0.0")
-TOKEN_STORE: dict[str, dict[str, Any]] = {}
 
 
-class OAuthTokenRequest(BaseModel):
-    grant_type: str = Field(default="client_credentials")
-    client_id: str
-    client_secret: str
+class ChatMessage(BaseModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
 
 
-class OAuthTokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in: int
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+    history: list[ChatMessage] = Field(default_factory=list)
+    thread_id: str | None = None
 
 
-@dataclass(slots=True)
-class AuthContext:
-    method: str
-    principal: str
+class ChatResponse(BaseModel):
+    status: str
+    answer: str
+    thread_id: str | None = None
 
 
 @lru_cache(maxsize=1)
 def load_vector_store() -> Chroma:
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    embeddings = get_embeddings_backend()
     return Chroma(
         collection_name=COLLECTION_NAME,
         persist_directory=str(CHROMA_DIR),
@@ -55,23 +45,9 @@ def load_vector_store() -> Chroma:
     )
 
 
-def _require_auth(
-    authorization: str | None = Header(default=None),
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
-) -> AuthContext:
-    if x_api_key and x_api_key == BUSINESS_API_KEY:
-        return AuthContext(method="api_key", principal="service-account")
-
-    if authorization and authorization.lower().startswith("bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-        token_data = TOKEN_STORE.get(token)
-        if token_data and token_data["expires_at"] > datetime.now(timezone.utc):
-            return AuthContext(method="oauth", principal=token_data["principal"])
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unauthorized.",
-    )
+@lru_cache(maxsize=1)
+def load_rag_agent():
+    return build_rag_agent()
 
 
 @app.get("/health")
@@ -79,33 +55,8 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/oauth/token", response_model=OAuthTokenResponse)
-def oauth_token(payload: OAuthTokenRequest) -> OAuthTokenResponse:
-    if payload.grant_type != "client_credentials":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only client_credentials is supported.",
-        )
-    if (
-        payload.client_id != BUSINESS_OAUTH_CLIENT_ID
-        or payload.client_secret != BUSINESS_OAUTH_CLIENT_SECRET
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid client credentials.",
-        )
-
-    access_token = token_urlsafe(32)
-    expires_in = 3600
-    TOKEN_STORE[access_token] = {
-        "principal": payload.client_id,
-        "expires_at": datetime.now(timezone.utc) + timedelta(seconds=expires_in),
-    }
-    return OAuthTokenResponse(access_token=access_token, expires_in=expires_in)
-
-
 @app.get("/v1/business/summary")
-def business_summary(_auth: AuthContext = Depends(_require_auth)) -> dict[str, Any]:
+def business_summary() -> dict[str, Any]:
     vector_store = load_vector_store()
     stored = vector_store._collection.get() if vector_store._collection else {}
     metadata = [item for item in stored.get("metadatas", []) if item]
@@ -130,7 +81,6 @@ def business_summary(_auth: AuthContext = Depends(_require_auth)) -> dict[str, A
 def business_search(
     q: str = Query(min_length=2),
     k: int = Query(default=4, ge=1, le=10),
-    _auth: AuthContext = Depends(_require_auth),
 ) -> dict[str, Any]:
     vector_store = load_vector_store()
     results = vector_store.similarity_search_with_score(q, k=k)
@@ -158,3 +108,54 @@ def business_search(
         "match_count": len(matches),
         "matches": matches,
     }
+
+
+def _extract_answer_text(result: Any) -> str:
+    messages = result.get("messages", []) if isinstance(result, dict) else []
+    if not messages:
+        return ""
+
+    last_message = messages[-1]
+    content = getattr(last_message, "content", None)
+    if isinstance(content, str):
+        return content.strip()
+
+    content_blocks = getattr(last_message, "content_blocks", None)
+    if content_blocks:
+        parts: list[str] = []
+        for block in content_blocks:
+            if isinstance(block, dict):
+                if block.get("type") == "text" and block.get("text"):
+                    parts.append(block["text"])
+            else:
+                block_type = getattr(block, "type", None)
+                block_text = getattr(block, "text", None)
+                if block_type == "text" and block_text:
+                    parts.append(block_text)
+        return "\n".join(parts).strip()
+
+    return str(last_message)
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(
+    payload: ChatRequest,
+) -> ChatResponse:
+    agent = load_rag_agent()
+    messages: list[dict[str, str]] = [
+        {"role": item.role, "content": item.content} for item in payload.history
+    ]
+    messages.append({"role": "user", "content": payload.message})
+
+    invoke_config: dict[str, Any] = {}
+    if payload.thread_id:
+        invoke_config["configurable"] = {"thread_id": payload.thread_id}
+
+    result = agent.invoke({"messages": messages}, config=invoke_config or None)
+    answer = _extract_answer_text(result)
+
+    return ChatResponse(
+        status="ok",
+        answer=answer,
+        thread_id=payload.thread_id,
+    )

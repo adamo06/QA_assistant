@@ -3,15 +3,12 @@ from pathlib import Path
 import json
 
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.tools import tool
 
+from memory.embeddings import get_embeddings_backend
 from memory.store import EmbeddedChunk, clear_documents, store_documents
 from memory.vectorstore import clear_vectorstore, index_chunks_in_chroma
-
-
-EMBEDDING_MODEL = "text-embedding-3-small"
 
 
 def ingest_pdf_corpus_data(pdf_paths: Sequence[str]) -> dict[str, object]:
@@ -57,15 +54,16 @@ def ingest_pdf_corpus_data(pdf_paths: Sequence[str]) -> dict[str, object]:
             "chunk_count": 0,
         }
 
-    embedding_client = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+    embedding_client = get_embeddings_backend()
     embeddings = embedding_client.embed_documents([chunk.page_content for chunk in chunks])
+    embedding_model = getattr(embedding_client, "model", "local-hash-embeddings")
     store_documents(
         [
             EmbeddedChunk(document=chunk, embedding=embedding)
             for chunk, embedding in zip(chunks, embeddings, strict=True)
         ]
     )
-    vectorstore_summary = index_chunks_in_chroma(chunks, embeddings)
+    vectorstore_summary = index_chunks_in_chroma(chunks, embeddings, embedding_model=embedding_model)
 
     unique_pages = {
         (chunk.metadata.get("source"), chunk.metadata.get("page"))
@@ -76,7 +74,7 @@ def ingest_pdf_corpus_data(pdf_paths: Sequence[str]) -> dict[str, object]:
     return {
         "status": "ok",
         "message": "PDF corpus ingested and parsed with LangChain.",
-        "embedding_model": EMBEDDING_MODEL,
+        "embedding_model": embedding_model,
         "ingested_files": ingested_files,
         "page_count": len(unique_pages),
         "chunk_count": len(chunks),
