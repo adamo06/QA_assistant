@@ -69,6 +69,23 @@ class BusinessApiClient:
         response.raise_for_status()
         return BusinessApiResult(payload=response.json())
 
+    def agent(self, instruction: str) -> BusinessApiResult:
+        response = self._client.post(
+            "/v1/business/agent",
+            json={"instruction": instruction},
+            headers=self._auth_headers(),
+        )
+        response.raise_for_status()
+        return BusinessApiResult(payload=response.json())
+
+    def demo_agent(self, instruction: str) -> BusinessApiResult:
+        response = self._client.post(
+            "/v1/demo/agent",
+            json={"instruction": instruction},
+        )
+        response.raise_for_status()
+        return BusinessApiResult(payload=response.json())
+
 
 @lru_cache(maxsize=1)
 def get_business_api_client() -> BusinessApiClient:

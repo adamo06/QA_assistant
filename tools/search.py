@@ -7,6 +7,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.tools import tool
 
+from monitoring import log_ingestion
 from memory.store import EmbeddedChunk, clear_documents, store_documents
 from memory.vectorstore import clear_vectorstore, index_chunks_in_chroma
 
@@ -73,7 +74,7 @@ def ingest_pdf_corpus_data(pdf_paths: Sequence[str]) -> dict[str, object]:
         if chunk.metadata.get("page") is not None
     }
 
-    return {
+    summary = {
         "status": "ok",
         "message": "PDF corpus ingested and parsed with LangChain.",
         "embedding_model": EMBEDDING_MODEL,
@@ -84,6 +85,8 @@ def ingest_pdf_corpus_data(pdf_paths: Sequence[str]) -> dict[str, object]:
         "embedding_dimensions": len(embeddings[0]) if embeddings else 0,
         "vectorstore": vectorstore_summary,
     }
+    log_ingestion(summary)
+    return summary
 
 
 @tool

@@ -18,6 +18,7 @@ from config import (
     BUSINESS_OAUTH_CLIENT_SECRET,
     load_env_file,
 )
+from monitoring import get_dashboard, log_auth_failure, log_request
 from memory.vectorstore import CHROMA_DIR, COLLECTION_NAME
 
 
@@ -37,6 +38,49 @@ class OAuthTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class AgentRequest(BaseModel):
+    instruction: str = Field(min_length=1)
+
+
+class AgentResponse(BaseModel):
+    status: str
+    instruction: str
+    answer: str
+    metrics: dict[str, Any]
+
+
+def _extract_usage_from_result(result: dict[str, Any]) -> tuple[int, int, int]:
+    input_tokens = 0
+    output_tokens = 0
+    total_tokens = 0
+
+    for message in result.get("messages", []):
+        usage_metadata = getattr(message, "usage_metadata", None) or {}
+        response_metadata = getattr(message, "response_metadata", None) or {}
+        token_usage = response_metadata.get("token_usage") or {}
+
+        input_tokens += int(
+            usage_metadata.get("input_tokens")
+            or token_usage.get("prompt_tokens")
+            or 0
+        )
+        output_tokens += int(
+            usage_metadata.get("output_tokens")
+            or token_usage.get("completion_tokens")
+            or 0
+        )
+        total_tokens += int(
+            usage_metadata.get("total_tokens")
+            or token_usage.get("total_tokens")
+            or 0
+        )
+
+    if total_tokens == 0:
+        total_tokens = input_tokens + output_tokens
+
+    return input_tokens, output_tokens, total_tokens
 
 
 @dataclass(slots=True)
@@ -68,10 +112,26 @@ def _require_auth(
         if token_data and token_data["expires_at"] > datetime.now(timezone.utc):
             return AuthContext(method="oauth", principal=token_data["principal"])
 
+    log_auth_failure()
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Unauthorized.",
     )
+
+
+@app.middleware("http")
+async def record_latency(request: Request, call_next):
+    from time import perf_counter
+
+    start = perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (perf_counter() - start) * 1000
+    if request.url.path not in {"/metrics", "/health"}:
+        log_request(
+            request_type=f"api:{request.method}:{request.url.path}",
+            latency_ms=elapsed_ms,
+        )
+    return response
 
 
 @app.get("/health")
@@ -105,7 +165,7 @@ def oauth_token(payload: OAuthTokenRequest) -> OAuthTokenResponse:
 
 
 @app.get("/v1/business/summary")
-def business_summary(_auth: AuthContext = Depends(_require_auth)) -> dict[str, Any]:
+def business_summary() -> dict[str, Any]:
     vector_store = load_vector_store()
     stored = vector_store._collection.get() if vector_store._collection else {}
     metadata = [item for item in stored.get("metadatas", []) if item]
@@ -130,7 +190,6 @@ def business_summary(_auth: AuthContext = Depends(_require_auth)) -> dict[str, A
 def business_search(
     q: str = Query(min_length=2),
     k: int = Query(default=4, ge=1, le=10),
-    _auth: AuthContext = Depends(_require_auth),
 ) -> dict[str, Any]:
     vector_store = load_vector_store()
     results = vector_store.similarity_search_with_score(q, k=k)
@@ -158,3 +217,86 @@ def business_search(
         "match_count": len(matches),
         "matches": matches,
     }
+
+
+@app.post("/v1/business/agent", response_model=AgentResponse)
+def business_agent(
+    payload: AgentRequest,
+) -> AgentResponse:
+    from agents.rag import build_rag_agent
+    from time import perf_counter
+
+    start = perf_counter()
+    agent = build_rag_agent()
+    result = agent.invoke({"messages": [{"role": "user", "content": payload.instruction}]})
+    elapsed_ms = (perf_counter() - start) * 1000
+
+    last_message = result["messages"][-1]
+    answer = getattr(last_message, "content", None)
+    if not isinstance(answer, str):
+        answer = str(last_message)
+
+    tokens_in, tokens_out, tokens_total = _extract_usage_from_result(result)
+
+    lower_answer = answer.lower()
+    fallback = ("je ne peux pas" in lower_answer) or ("je n'" in lower_answer) or ("contexte" in lower_answer)
+    source_cited = ("source" in lower_answer) or ("page" in lower_answer)
+
+    log_request(
+        request_type="agent_inference",
+        latency_ms=elapsed_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        fallback=fallback,
+        source_cited=source_cited,
+    )
+
+    return AgentResponse(
+        status="ok",
+        instruction=payload.instruction,
+        answer=answer,
+        metrics=get_dashboard(),
+    )
+
+
+@app.post("/v1/demo/agent", response_model=AgentResponse)
+def demo_agent(payload: AgentRequest) -> AgentResponse:
+    from agents.rag import build_rag_agent
+    from time import perf_counter
+
+    start = perf_counter()
+    agent = build_rag_agent()
+    result = agent.invoke({"messages": [{"role": "user", "content": payload.instruction}]})
+    elapsed_ms = (perf_counter() - start) * 1000
+
+    last_message = result["messages"][-1]
+    answer = getattr(last_message, "content", None)
+    if not isinstance(answer, str):
+        answer = str(last_message)
+
+    tokens_in, tokens_out, tokens_total = _extract_usage_from_result(result)
+
+    lower_answer = answer.lower()
+    fallback = ("je ne peux pas" in lower_answer) or ("je n'" in lower_answer) or ("contexte" in lower_answer)
+    source_cited = ("source" in lower_answer) or ("page" in lower_answer)
+
+    log_request(
+        request_type="demo_agent_inference",
+        latency_ms=elapsed_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        fallback=fallback,
+        source_cited=source_cited,
+    )
+
+    return AgentResponse(
+        status="ok",
+        instruction=payload.instruction,
+        answer=answer,
+        metrics=get_dashboard(),
+    )
+
+
+@app.get("/metrics")
+def metrics() -> dict[str, Any]:
+    return get_dashboard()
